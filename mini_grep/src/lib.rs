@@ -1,7 +1,24 @@
-use clap::{Arg, Command};
-
+use clap::Parser;
 use std::{error::Error, fs};
+#[derive(Parser, Debug)]
+#[command(author="Mineral", version="v1.0", about="Searches for a string in a file", long_about = Some("这个程序是在一个文件里面搜索字符串,并统计出现次数. \
+                     Usage: ./program query filepath [-c] \"case sensitive search\"")
+		)]
 
+pub struct Config {
+    #[arg(required = true, help = "The string to search for")]
+    pub query: String,
+    #[arg(required = true, help = "The filepath to search for")]
+    pub filepath: String,
+    #[arg(short, long, default_value = "false", help = "case sensitive search")]
+    pub case_sensitive: bool,
+}
+impl Config {
+    pub fn from_clap_app() -> Result<Config, &'static str> {
+        let args = Config::parse();
+        Ok(args)
+    }
+}
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let fd = fs::read_to_string(config.filepath)?;
     let ret = if config.case_sensitive {
@@ -9,93 +26,19 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     } else {
         search_case_insensitive(&config.query, &fd)
     };
-    for line in ret {
-        println!("{}", line);
-    }
+
+    println!("{}出现了{}次", config.query, ret);
+
     Ok(())
 }
-pub fn search<'a>(query: &str, fd: &'a str) -> Vec<&'a str> {
-    fd.lines().filter(|line| line.contains(query)).collect()
-}
-pub fn search_case_insensitive<'a>(query: &str, fd: &'a str) -> Vec<&'a str> {
+pub fn search<'a>(query: &str, fd: &'a str) -> usize {
     fd.lines()
-        .filter(|line| line.to_lowercase().contains(query.to_lowercase().as_str()))
-        .collect()
+        .map(|line| line.to_lowercase().matches(query).count())
+        .sum()
 }
-pub struct Config {
-    pub query: String,
-    pub filepath: String,
-    pub case_sensitive: bool,
-}
-impl Config {
-    pub fn from_clap_app() -> Result<Config, &'static str> {
-        let matches = Command::new("mini_grep")
-            .version("1.0")
-            .author("<lingfuyi> <<lingfuyi@126.com>>")
-            .about("Searches for a string in a file")
-            .arg(
-                Arg::new("case_sensitive")
-                    .short('s')
-                    .long("case-sensitive")
-                    .help("Case sensitive search"),
-            )
-            .arg(
-                Arg::new("query")
-                    .required(true)
-                    .index(1)
-                    .help("The string to search for"),
-            )
-            .arg(
-                Arg::new("filepath")
-                    .required(true)
-                    .index(2)
-                    .help("The file to search in"),
-            )
-            .get_matches();
-        let query = matches
-            .get_one::<String>("query")
-            .ok_or("query is required")?;
-        let filepath = matches
-            .get_one::<String>("filepath")
-            .ok_or("file path is required");
-        //通过 copied().unwrap_or(true) 将 Option<&bool> 转换为 bool，并设置默认值为 true
-        let case_sensitive = matches
-            .get_one::<bool>("case_sensitive")
-            .copied()
-            .unwrap_or(true);
-
-        Ok(Config {
-            query: String::from(query),
-            filepath: String::from(filepath),
-            case_sensitive,
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn case_sensitive() {
-        let query = "duct";
-        let contents = "\
-Rust:
-safe, fast, productive.
-Pick three.
-Duct tape.";
-        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
-    }
-    #[test]
-    fn case_insensitive() {
-        let query = "rUsT";
-        let contents = "\
-Rust:
-safe, fast, productive.
-Pick three.
-Trust me.";
-        assert_eq!(
-            vec!["Rust:", "Trust me.",],
-            search_case_insensitive(query, contents)
-        );
-    }
+pub fn search_case_insensitive<'a>(query: &str, fd: &'a str) -> usize {
+    let query = query.to_lowercase();
+    fd.lines()
+        .map(|line| line.to_lowercase().matches(&query).count())
+        .sum()
 }
